@@ -1,11 +1,11 @@
-# Dependencias del Proyecto de Reconocimiento de Lenguaje de Señas ASL
+﻿# Dependencias del Proyecto de Reconocimiento de Lenguaje de Señas ASL
 
 # Core Deep Learning
 tensorflow>=2.10.0,<2.16.0
 keras>=2.10.0
 
 # Procesamiento de datos
-numpy>=1.23.0,<2.0.0
+numpy>=2.0.0
 pandas>=1.5.0
 
 # Visualización
@@ -23,8 +23,15 @@ scikit-image>=0.19.0
 scikit-learn>=1.2.0
 scipy>=1.10.0
 
-# Aplicación Web con Reflex (Frontend y Backend en Python puro)
+# === Aplicación Web ===
+
+# Reflex (Frontend y Backend)
 reflex>=0.3.0
+fastapi>=0.95.0
+uvicorn>=0.21.0
+wrapt>=1.17.0
+
+# === Herramientas de Desarrollo ===
 
 # Kaggle API
 kaggle>=1.5.12
