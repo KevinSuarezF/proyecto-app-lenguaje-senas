@@ -40,7 +40,16 @@ checkpoints/
 # Datos
 data/raw/*.csv
 data/raw/*.zip
+data/raw/*.png
+data/raw/*.PNG
+data/raw/*.jpg
+data/raw/*.jpeg
+data/raw/sign_mnist_*/
 *.npz
+*.npy
+
+# Excepciones importantes (incluir estos archivos)
+!data/raw/dataset_metadata.json
 
 # Credenciales
 kaggle.json
