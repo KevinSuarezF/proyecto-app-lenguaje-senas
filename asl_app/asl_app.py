@@ -123,81 +123,93 @@ def load_model_once():
     return None, False
 
 
-# Inicializar MediaPipe globalmente para no recargarlo en cada frame
-# --- 1. CONFIGURACIÓN GLOBAL (Fuera de la función para mayor velocidad) ---
+# --- CONFIGURACIÓN GLOBAL (EJECUTAR UNA SOLA VEZ AL INICIAR) ---
 BaseOptions = mp.tasks.BaseOptions
 HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-# Inicializamos el detector una sola vez globalmente
+# Ruta absoluta al modelo para evitar errores de archivo no encontrado
+model_path = Path(__file__).parent / "hand_landmarker.task"
+
 options = HandLandmarkerOptions(
-    base_options=BaseOptions(model_asset_path='hand_landmarker.task'),
+    base_options=BaseOptions(model_asset_path=str(model_path)),
     running_mode=VisionRunningMode.IMAGE,
-    num_hands=1 # Cambiado a 1 para optimizar la clasificación de señas
+    num_hands=1,
+    min_hand_detection_confidence=0.6 # Un poco más permisivo para fluidez
 )
+
+# Inicializamos el detector globalmente
 detector = HandLandmarker.create_from_options(options)
 
+# Diccionario de mapeo (fuera para no recrearlo siempre)
+label_to_letter = {
+    0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E', 5: 'F', 6: 'G', 7: 'H', 8: 'I',
+    10: 'K', 11: 'L', 12: 'M', 13: 'N', 14: 'O', 15: 'P', 16: 'Q', 17: 'R',
+    18: 'S', 19: 'T', 20: 'U', 21: 'V', 22: 'W', 23: 'X', 24: 'Y'
+}
+
 def process_frame_data(frame_data: str):
-    """Procesar frame usando la nueva API de MediaPipe Tasks."""
+    """Procesar frame usando MediaPipe Tasks + CNN con optimización de lag."""
     try:
-        # 1. Decodificación de la imagen
+        # 1. Decodificación optimizada
         if "," in frame_data:
             frame_data = frame_data.split(",")[1]
+        
         frame_bytes = base64.b64decode(frame_data)
         nparr = np.frombuffer(frame_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
-            return {"success": False, "error": "No se pudo decodificar el frame"}
+            return {"success": False, "error": "Error decodificando frame"}
 
         h, w, _ = frame.shape
-        # Convertir a RGB para MediaPipe
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # 2. DETECCIÓN con MediaPipe Tasks
+        # 2. DETECCIÓN (Usa el detector global ya cargado en RAM)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
         detection_result = detector.detect(mp_image)
 
-        # 3. PROCESAMIENTO de los resultados
+        # 3. PROCESAMIENTO DE RESULTADOS
         if detection_result.hand_landmarks:
-            # Tomamos la primera mano detectada
             hand_landmarks = detection_result.hand_landmarks[0]
             
-            # Extraer coordenadas para el recorte (Landmarks son objetos con x, y, z)
-            x_coords = [lm.x for lm in hand_landmarks]
-            y_coords = [lm.y for lm in hand_landmarks]
+            # Extraer coordenadas en píxeles
+            x_coords = [lm.x * w for lm in hand_landmarks]
+            y_coords = [lm.y * h for lm in hand_landmarks]
             
-            x_min, x_max = int(min(x_coords) * w), int(max(x_coords) * w)
-            y_min, y_max = int(min(y_coords) * h), int(max(y_coords) * h)
+            x_min, x_max = int(min(x_coords)), int(max(x_coords))
+            y_min, y_max = int(min(y_coords)), int(max(y_coords))
 
-            # Recortar con margen (padding)
-            offset = 30
+            # Recortar con margen (padding) y validación de bordes
+            offset = 35
             y1, y2 = max(0, y_min - offset), min(h, y_max + offset)
             x1, x2 = max(0, x_min - offset), min(w, x_max + offset)
+            
             hand_crop = frame[y1:y2, x1:x2]
+            
+            if hand_crop.size == 0:
+                return {"success": False, "error": "Recorte de mano inválido"}
 
-            # 4. PREPARACIÓN PARA LA CNN (Notebook 03)
+            # 4. PREPARACIÓN PARA LA CNN (Estandarización 28x28)
             gray = cv2.cvtColor(hand_crop, cv2.COLOR_BGR2GRAY)
             resized = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
             normalized = resized.astype('float32') / 255.0
-            input_data = np.expand_dims(normalized, axis=(0, -1))
+            input_data = normalized.reshape(1, 28, 28, 1) # Formato batch para Keras
 
             # 5. PREDICCIÓN
             model, loaded = load_model_once()
             if not loaded: 
-                return {"success": False, "error": "Modelo no cargado"}
+                return {"success": False, "error": "Modelo CNN no disponible"}
             
+            # verbose=0 es vital para no saturar la consola y ganar velocidad
             predictions = model.predict(input_data, verbose=0)
             predicted_class = int(np.argmax(predictions[0]))
             confidence = float(np.max(predictions[0]))
 
-            # Mapeo de tu diccionario label_to_letter
-            label_to_letter = {
-                0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E', 5: 'F', 6: 'G', 7: 'H', 8: 'I',
-                10: 'K', 11: 'L', 12: 'M', 13: 'N', 14: 'O', 15: 'P', 16: 'Q', 17: 'R',
-                18: 'S', 19: 'T', 20: 'U', 21: 'V', 22: 'W', 23: 'X', 24: 'Y'
-            }
+            # Filtrar predicciones basura (umbral de confianza)
+            if confidence < 0.45:
+                return {"success": False, "error": "Confianza baja, ajusta la mano"}
 
             return {
                 "success": True,
@@ -205,11 +217,10 @@ def process_frame_data(frame_data: str):
                 "confidence": f"{confidence*100:.1f}%"
             }
         
-        return {"success": False, "error": "Mano no detectada"}
+        return {"success": False, "error": "No se detecta ninguna mano"}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
-
+        return {"success": False, "error": f"Error en procesamiento: {str(e)}"}
 
 # Exportar la app para que Reflex la encuentre
 __all__ = ["app"]
