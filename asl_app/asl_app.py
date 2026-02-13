@@ -18,18 +18,28 @@ import mediapipe as mp
 import requests
 
 
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = BASE_DIR / "hand_landmarker.task"
+
 def download_mediapipe_model():
-    model_path = "hand_landmarker.task"
     url = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
     
-    if not os.path.exists(model_path):
-        print("Descargando modelo de MediaPipe...")
-        response = requests.get(url)
-        with open(model_path, "wb") as f:
-            f.write(response.content)
-        print("✓ Modelo descargado.")
+    # Verificamos si el archivo NO existe en la ruta absoluta
+    if not MODEL_PATH.exists():
+        print(f"Descargando modelo de MediaPipe en: {MODEL_PATH}...")
+        try:
+            response = requests.get(url, timeout=15)
+            response.raise_for_status() # Lanza error si falla la descarga
+            
+            with open(MODEL_PATH, "wb") as f:
+                f.write(response.content)
+            print("✓ Modelo descargado y guardado correctamente.")
+        except Exception as e:
+            print(f"X Error al descargar el modelo: {e}")
+    else:
+        print(f"✓ El modelo ya existe en: {MODEL_PATH}")
 
-# Llamar a la función antes de inicializar el detector
+# Llamar a la función
 download_mediapipe_model()
 
 # ============================================================================
