@@ -2,6 +2,23 @@
 import reflex as rx
 import base64
 from pathlib import Path
+import mediapipe as mp
+
+# --- INICIALIZACIÓN GLOBAL (Fuera de la clase para velocidad) ---
+# MediaPipe
+BaseOptions = mp.tasks.BaseOptions
+HandLandmarker = mp.tasks.vision.HandLandmarker
+HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
+VisionRunningMode = mp.tasks.vision.RunningMode
+
+model_path_mp = Path(__file__).parent.parent / "asl_app" / "hand_landmarker.task"
+options_mp = HandLandmarkerOptions(
+    base_options=BaseOptions(model_asset_path=str(model_path_mp)),
+    running_mode=VisionRunningMode.IMAGE,
+    num_hands=1
+)
+# Solo creamos el detector si el archivo existe
+detector_mp = HandLandmarker.create_from_options(options_mp) if model_path_mp.exists() else None
 
 
 class ASLState(rx.State):
@@ -66,57 +83,73 @@ class ASLState(rx.State):
             self.error_message = f"Error inesperado: {str(e)[:100]}"
             self.model_loaded = False
     
-    def process_frame(self, frame_data: str):
-        """Procesar frame de video y hacer predicción."""
-        if not self.is_running or not self.model_loaded:
+    def process_captured_frame(self, frame_data: str):
+        """Procesamiento optimizado con MediaPipe."""
+        if not frame_data:
+            self.error_message = "No hay datos de imagen"
             return
-        
+
         try:
-            # Lazy imports - solo se cargan cuando se necesitan
-            from tensorflow import keras
-            import cv2
-            import numpy as np
-            
-            # Decodificar imagen base64
-            if not frame_data or not isinstance(frame_data, str):
-                return
-                
+            # 1. Decodificar
             if "," in frame_data:
                 frame_data = frame_data.split(",")[1]
+            frame_bytes = base64.b64decode(frame_data)
+            nparr = np.frombuffer(frame_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                self.error_message = "Error decodificando frame"
+                return
+
+            # 2. MediaPipe: Localizar la mano
+            h, w, _ = frame.shape
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
             
-            try:
-                frame_bytes = base64.b64decode(frame_data)
-                nparr = np.frombuffer(frame_bytes, np.uint8)
-                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            # Usar el detector global
+            detection_result = detector_mp.detect(mp_image)
+
+            if detection_result.hand_landmarks:
+                # 3. Recortar (Crop)
+                landmarks = detection_result.hand_landmarks[0]
+                x_coords = [lm.x * w for lm in landmarks]
+                y_coords = [lm.y * h for lm in landmarks]
                 
-                if frame is None:
-                    self.error_message = "No se pudo decodificar la imagen"
-                    return
+                x1, x2 = int(min(x_coords) - 20), int(max(x_coords) + 20)
+                y1, y2 = int(min(y_coords) - 20), int(max(y_coords) + 20)
                 
-                # Procesar imagen para el modelo
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                resized = cv2.resize(gray, (28, 28))
+                # Validar límites y recortar
+                hand_crop = frame[max(0, y1):min(h, y2), max(0, x1):min(w, x2)]
+                
+                # 4. Preprocesar para CNN (28x28 gray)
+                gray = cv2.cvtColor(hand_crop, cv2.COLOR_BGR2GRAY)
+                resized = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
                 normalized = resized.astype('float32') / 255.0
-                input_data = np.expand_dims(normalized, axis=-1)
-                input_data = np.expand_dims(input_data, axis=0)
+                input_data = normalized.reshape(1, 28, 28, 1)
+
+                # 5. Predicción (Usando el modelo ya cargado en memoria)
+                # NOTA: Asegúrate de que load_model() guarde el modelo en una variable global
+                from tensorflow import keras
+                model_path_cnn = Path(__file__).parent.parent / "models" / "DeepCNN.keras"
                 
-                # Cargar modelo y hacer predicción
-                model_path = Path(__file__).parent.parent / "models" / "DeepCNN.keras"
-                model = keras.models.load_model(str(model_path))
-                predictions = model.predict(input_data, verbose=0)
-                predicted_class = int(np.argmax(predictions[0]))
-                conf_value = float(np.max(predictions[0]))
+                # Optimización: En producción, no cargues el modelo aquí. 
+                # Cárgalo en __init__ o load_model una sola vez.
+                model = keras.models.load_model(str(model_path_cnn)) 
                 
-                # Actualizar estado
-                self.predicted_letter = self.label_to_letter.get(predicted_class, "?")
-                self.confidence = f"{conf_value*100:.1f}%"
+                res = model.predict(input_data, verbose=0)
+                idx = np.argmax(res[0])
+                conf = float(np.max(res[0]))
+
+                self.predicted_letter = self.label_to_letter.get(idx, "?")
+                self.confidence = f"{conf*100:.1f}%"
                 self.error_message = ""
-                
-            except Exception as e:
-                self.error_message = f"Error procesando frame: {str(e)[:80]}"
-        
+            else:
+                self.error_message = "Mano no detectada por MediaPipe"
+                self.predicted_letter = "?"
+                self.confidence = "0%"
+
         except Exception as e:
-            self.error_message = f"Error: {str(e)[:80]}"
+            self.error_message = f"Error: {str(e)}"
     
     def toggle_camera(self):
         """Iniciar/detener captura de cámara."""
