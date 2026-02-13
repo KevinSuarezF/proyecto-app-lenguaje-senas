@@ -4,7 +4,19 @@ import cv2
 import numpy as np
 import mediapipe as mp
 from pathlib import Path
+import os
+import warnings
 
+# 1. Silenciar logs de TensorFlow (0 = todos, 1 = info, 2 = warnings, 3 = solo errores)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+# 2. Desactivar el aviso de optimizaciones oneDNN
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+# 3. Silenciar los avisos de Protobuf y otros UserWarnings de librerías
+warnings.filterwarnings("ignore", category=UserWarning)
+# Específicamente para el ruido de protobuf que mostraste:
+warnings.filterwarnings("ignore", module="google.protobuf.runtime_version")
 # --- INICIALIZACIÓN GLOBAL (Persistente en RAM) ---
 _CNN_MODEL = None  # Aquí guardaremos tu DeepCNN.keras
 
