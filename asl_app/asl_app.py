@@ -19,7 +19,7 @@ import requests
 import numpy as np
 import os
 import warnings
-
+import cv2
 # 1. Silenciar logs de TensorFlow (0 = todos, 1 = info, 2 = warnings, 3 = solo errores)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
