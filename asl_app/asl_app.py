@@ -17,6 +17,20 @@ from pathlib import Path
 import mediapipe as mp
 import requests
 
+import os
+import warnings
+
+# 1. Silenciar logs de TensorFlow (0 = todos, 1 = info, 2 = warnings, 3 = solo errores)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+# 2. Desactivar el aviso de optimizaciones oneDNN
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+# 3. Silenciar los avisos de Protobuf y otros UserWarnings de librerías
+warnings.filterwarnings("ignore", category=UserWarning)
+# Específicamente para el ruido de protobuf que mostraste:
+warnings.filterwarnings("ignore", module="google.protobuf.runtime_version")
+
 
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "hand_landmarker.task"
