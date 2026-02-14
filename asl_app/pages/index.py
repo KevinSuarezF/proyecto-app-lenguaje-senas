@@ -83,6 +83,9 @@ def index() -> rx.Component:
                         if (data && data.success) {
                             console.log('✓ Predicción:', data.letter, data.confidence);
                             
+                            // Limpiar error cuando hay predicción exitosa
+                            localStorage.removeItem('asl_error');
+                            
                             // Guardar en localStorage para Reflex
                             localStorage.setItem('asl_prediction', JSON.stringify({
                                 letter: data.letter || '?',
@@ -106,7 +109,11 @@ def index() -> rx.Component:
                                 }
                             }
                         } else {
-                            console.error('Error:', data);
+                            console.error('Error:', data.error);
+                            // Remover predicción anterior para que polling muestre error
+                            localStorage.removeItem('asl_prediction');
+                            // Guardar el error en localStorage para mostrar en la UI
+                            localStorage.setItem('asl_error', data.error || 'Error desconocido');
                         }
                     } catch(e) {
                         console.error('Error de conexión:', e.message);
@@ -141,30 +148,40 @@ def index() -> rx.Component:
             """
         ),
         
-        # Script para sincronizar localStorage con Reflex state
+        # Script para sincronizar localStorage con la UI
         rx.script(
             """
-            // Polling para sincronizar predicciones
+            // Mostrar errores desde localStorage por más tiempo
             setInterval(function() {
-                const data = localStorage.getItem('asl_prediction');
-                if (data) {
-                    const pred = JSON.parse(data);
-                    // Buscar elemento de predicción y actualizar
-                    const heading = document.querySelector('h1, h2, h3, h4, h5, h6');
-                    if (heading && heading.textContent.match(/^[?A-Y]$/)) {
-                        heading.textContent = pred.letter || '?';
-                    }
-                    
-                    // Buscar elemento de confianza y actualizar
-                    const spans = document.querySelectorAll('span');
-                    for (let span of spans) {
-                        if (span.textContent.match(/^\\d+(\\.\\d)?%$/)) {
-                            span.textContent = pred.confidence || '0%';
-                            break;
+                const errorData = localStorage.getItem('asl_error');
+                const predData = localStorage.getItem('asl_prediction');
+                const errorContainer = document.getElementById('asl-error-container');
+                const errorText = document.getElementById('asl-error-text');
+                
+                if (errorContainer && errorText) {
+                    // Si hay predicción exitosa, limpiar error
+                    if (predData) {
+                        errorContainer.style.display = 'none';
+                        localStorage.removeItem('asl_error');
+                        sessionStorage.removeItem('errorTimestamp');
+                    } 
+                    // Si hay error, mostrar
+                    else if (errorData) {
+                        errorText.textContent = errorData;
+                        errorContainer.style.display = 'block';
+                        console.log('Error visible:', errorData);
+                        sessionStorage.setItem('errorTimestamp', Date.now());
+                    } 
+                    // Si no hay error, mantener oculto después de 2 segundos
+                    else {
+                        const errorTimestamp = sessionStorage.getItem('errorTimestamp');
+                        if (errorTimestamp && (Date.now() - parseInt(errorTimestamp)) > 2000) {
+                            errorContainer.style.display = 'none';
+                            sessionStorage.removeItem('errorTimestamp');
                         }
                     }
                 }
-            }, 100);
+            }, 50);
             """
         ),
         
@@ -320,6 +337,21 @@ def index() -> rx.Component:
                             box_shadow="0 8px 16px rgba(124, 58, 237, 0.2)"
                         ),
                         
+                        # Mensaje de error - Actualizado por JavaScript desde localStorage
+                        rx.html("""
+                        <div id="asl-error-container" style="width: 100%; display: none;">
+                            <div style="padding: 1em; background: #fed7d7; border: 1px solid #fc8181; border-radius: 8px; display: flex; gap: 0.5em; align-items: center;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f56565" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                                <span id="asl-error-text" style="color: #f56565; font-weight: 500; font-size: 0.9em;"></span>
+                            </div>
+                        </div>
+                        """),
+                        
+                        # Estado de grabación
                         rx.cond(
                             ASLState.is_running,
                             rx.badge(
