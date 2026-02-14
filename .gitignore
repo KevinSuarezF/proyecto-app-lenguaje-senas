@@ -29,6 +29,7 @@ venv/
 env/
 ENV/
 .venv
+lenguaje-senas/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -40,6 +41,9 @@ logs/
 *.keras
 *.pb
 checkpoints/
+
+# MediaPipe Models
+*.task
 
 # Datos
 data/raw/*.csv
