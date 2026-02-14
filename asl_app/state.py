@@ -78,6 +78,18 @@ class ASLState(rx.State):
             self.error_message = f"Error al cargar CNN: {str(e)[:50]}"
             self.model_loaded = False
 
+    def start_camera(self):
+        """Iniciar cámara y actualizar estado is_running."""
+        self.is_running = True
+        if not self.model_loaded:
+            self.load_model()
+        return rx.call_script("window.startCamera()")
+    
+    def stop_camera(self):
+        """Detener cámara y actualizar estado is_running."""
+        self.is_running = False
+        return rx.call_script("window.stopCamera()")
+
     def toggle_camera(self):
         """Iniciar/detener cámara e invocar scripts de JavaScript."""
         self.is_running = not self.is_running
@@ -85,9 +97,9 @@ class ASLState(rx.State):
             if not self.model_loaded:
                 self.load_model()
             # Llamada al script de JS en assets/camera.js
-            return rx.call_script("startCamera()")
+            return rx.call_script("window.startCamera()")
         else:
-            return rx.call_script("stopCamera()")
+            return rx.call_script("window.stopCamera()")
 
     def process_captured_frame(self, frame_data: str):
         """

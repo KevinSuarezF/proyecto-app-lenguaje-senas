@@ -301,7 +301,7 @@ def index() -> rx.Component:
                                     align_items="center",
                                     spacing="1"
                                 ),
-                                on_click=rx.call_script("window.startCamera()"),
+                                on_click=ASLState.start_camera,
                                 color_scheme="blue",
                                 size="2",
                                 font_weight="bold",
@@ -333,7 +333,7 @@ def index() -> rx.Component:
                                 align_items="center",
                                 spacing="1"
                             ),
-                            on_click=rx.call_script("window.stopCamera()"),
+                            on_click=ASLState.stop_camera,
                             color_scheme="red",
                             size="2",
                             font_weight="bold",
