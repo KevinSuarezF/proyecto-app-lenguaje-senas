@@ -173,12 +173,10 @@ label_to_letter = {
     18: 'S', 19: 'T', 20: 'U', 21: 'V', 22: 'W', 23: 'X', 24: 'Y'
 }
 
-def process_frame_data(frame_data: str, detector, model, label_map):
-    """
-    Procesamiento optimizado: MediaPipe (Detección) -> Crop Cuadrado -> CNN (Clasificación).
-    """
+def process_frame_data(frame_data: str):
+    """Procesar frame usando MediaPipe Tasks + CNN con recorte cuadrado y optimización de lag."""
     try:
-        # 1. Decodificación de Base64 a Imagen
+        # 1. Decodificación optimizada
         if "," in frame_data:
             frame_data = frame_data.split(",")[1]
         
@@ -187,68 +185,74 @@ def process_frame_data(frame_data: str, detector, model, label_map):
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if frame is None:
-            return {"success": False, "error": "Frame inválido"}
+            return {"success": False, "error": "Error decodificando frame"}
 
         h, w, _ = frame.shape
+        # MediaPipe necesita RGB
         img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        # 2. Detección de mano con MediaPipe Tasks
+        # 2. DETECCIÓN (Asume que 'detector' es una instancia global de MediaPipe Tasks)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
         detection_result = detector.detect(mp_image)
 
-        if not detection_result.hand_landmarks:
-            return {"success": False, "error": "No se detecta mano"}
+        # 3. PROCESAMIENTO DE RESULTADOS
+        if detection_result.hand_landmarks:
+            hand_landmarks = detection_result.hand_landmarks[0]
+            
+            # Extraer coordenadas en píxeles
+            x_coords = [lm.x * w for lm in hand_landmarks]
+            y_coords = [lm.y * h for lm in hand_landmarks]
+            
+            x_min, x_max = min(x_coords), max(x_coords)
+            y_min, y_max = min(y_coords), max(y_coords)
 
-        # 3. Obtener coordenadas del cuadro delimitador (Bounding Box)
-        hand_landmarks = detection_result.hand_landmarks[0]
-        x_coords = [lm.x * w for lm in hand_landmarks]
-        y_coords = [lm.y * h for lm in hand_landmarks]
+            # --- LÓGICA DE RECORTE CUADRADO ---
+            # Calculamos el centro y el lado más largo para que sea un cuadrado
+            box_w = x_max - x_min
+            box_h = y_max - y_min
+            center_x, center_y = (x_min + x_max) / 2, (y_min + y_max) / 2
+            
+            # Añadimos un offset (padding) proporcional al tamaño de la mano
+            side = max(box_w, box_h) + 60  # 60 píxeles de margen total
+            
+            # Definir límites asegurando que no se salgan de la imagen
+            x1 = max(0, int(center_x - side / 2))
+            y1 = max(0, int(center_y - side / 2))
+            x2 = min(w, int(center_x + side / 2))
+            y2 = min(h, int(center_y + side / 2))
+
+            # Recortamos directamente del img_rgb para consistencia de color
+            hand_crop = img_rgb[y1:y2, x1:x2]
+            
+            if hand_crop.size == 0:
+                return {"success": False, "error": "Recorte de mano inválido"}
+
+            # 4. PREPARACIÓN PARA LA CNN (Estandarización 28x28)
+            gray = cv2.cvtColor(hand_crop, cv2.COLOR_RGB2GRAY)
+            resized = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
+            normalized = resized.astype('float32') / 255.0
+            input_data = normalized.reshape(1, 28, 28, 1)
+
+            # 5. PREDICCIÓN (Asume que 'model' y 'label_to_letter' son globales)
+            # Nota: load_model_once() se omite aquí para ganar velocidad; el modelo debe estar cargado
+            predictions = model.predict(input_data, verbose=0)
+            predicted_class = int(np.argmax(predictions[0]))
+            confidence = float(np.max(predictions[0]))
+
+            # Filtrar por confianza
+            if confidence < 0.45:
+                return {"success": False, "error": "Baja confianza"}
+
+            return {
+                "success": True,
+                "letter": label_to_letter.get(predicted_class, "?"),
+                "confidence": f"{confidence*100:.1f}%"
+            }
         
-        x_min, x_max = int(min(x_coords)), int(max(x_coords))
-        y_min, y_max = int(min(y_coords)), int(max(y_coords))
-
-        # 4. Crear un recorte CUADRADO con margen (Padding)
-        # Esto evita deformar la mano al redimensionar a 28x28
-        offset = 40
-        side_length = max(x_max - x_min, y_max - y_min) + offset * 2
-        
-        # Centros de la mano
-        center_x, center_y = (x_min + x_max) // 2, (y_min + y_max) // 2
-        
-        # Calcular nuevos límites cuadrados
-        nx1 = max(0, center_x - side_length // 2)
-        ny1 = max(0, center_y - side_length // 2)
-        nx2 = min(w, nx1 + side_length)
-        ny2 = min(h, ny1 + side_length)
-
-        hand_crop = img_rgb[ny1:ny2, nx1:nx2]
-
-        # 5. Pre-procesamiento para la CNN (28x28, Grayscale, Normalizado)
-        gray = cv2.cvtColor(hand_crop, cv2.COLOR_RGB2GRAY)
-        resized = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
-        
-        # Preparar tensor de entrada: (1, 28, 28, 1)
-        input_data = resized.astype('float32') / 255.0
-        input_data = np.expand_dims(input_data, axis=(0, -1))
-
-        # 6. Predicción
-        predictions = model.predict(input_data, verbose=0)
-        idx = np.argmax(predictions[0])
-        confidence = float(predictions[0][idx])
-
-        # Umbral de seguridad
-        if confidence < 0.50:
-            return {"success": False, "error": "Baja confianza, acerque la mano"}
-
-        return {
-            "success": True,
-            "letter": label_map.get(idx, "?"),
-            "confidence": f"{confidence*100:.1f}%",
-            "coords": {"x1": nx1, "y1": ny1, "x2": nx2, "y2": ny2}
-        }
+        return {"success": False, "error": "No se detecta ninguna mano"}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": f"Error: {str(e)}"}
 
 # Exportar la app para que Reflex la encuentre
 __all__ = ["app"]
