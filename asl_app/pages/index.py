@@ -1,6 +1,19 @@
 """Página principal de la app ASL con Reflex."""
 import reflex as rx
+import base64
 from asl_app.state import ASLState
+
+# Cargar imagen de referencia como base64
+def get_asl_reference_image():
+    try:
+        img_path = "public/images/Referencia.png"
+        with open(img_path, "rb") as img_file:
+            b64 = base64.b64encode(img_file.read()).decode()
+            return f"data:image/png;base64,{b64}"
+    except:
+        return ""
+
+asl_reference_b64 = get_asl_reference_image()
 
 
 def index() -> rx.Component:
@@ -517,6 +530,42 @@ def index() -> rx.Component:
                 width="100%",
                 spacing="4",
                 align_items="stretch"
+            ),
+            
+            # Sección de referencia ASL
+            rx.vstack(
+                rx.divider(margin="2em 0"),
+                rx.hstack(
+                    rx.box(
+                        width="8px",
+                        height="24px",
+                        border_radius="4px",
+                        background="linear-gradient(180deg, #38a169, #2d5a2d)"
+                    ),
+                    rx.heading("Referencia del Alfabeto ASL", size="6", font_weight="700"),
+                    align_items="center",
+                    spacing="2"
+                ),
+                rx.box(
+                    rx.html(f"""
+                    <div style="text-align: center; padding: 1em;">
+                        <img src="{asl_reference_b64}" 
+                             alt="Alfabeto ASL Referencia" 
+                             style="max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+                    </div>
+                    """),
+                    width="100%"
+                ),
+                rx.text(
+                    "Utiliza este alfabeto como referencia para formar correctamente cada seña",
+                    text_align="center",
+                    font_size="sm",
+                    color=rx.color_mode_cond("#666", "#aaa"),
+                    font_style="italic"
+                ),
+                width="100%",
+                spacing="3",
+                padding="2em 0"
             ),
             
             # Footer
