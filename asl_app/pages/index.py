@@ -86,6 +86,34 @@ def index() -> rx.Component:
                             // Limpiar error cuando hay predicción exitosa
                             localStorage.removeItem('asl_error');
                             
+                            // Guardar imágenes en localStorage si vienen en la respuesta
+                            if (data.hand_crop) {
+                                localStorage.setItem('asl_hand_crop', data.hand_crop);
+                                console.log('✓ Mano recortada guardada en localStorage');
+                                // Actualizar directamente la imagen si existe
+                                const handImg = document.getElementById('asl-hand-crop-img');
+                                if (handImg) {
+                                    handImg.src = data.hand_crop;
+                                    handImg.style.display = 'block';
+                                    const placeholder = document.getElementById('hand-crop-placeholder');
+                                    if (placeholder) placeholder.style.display = 'none';
+                                    console.log('✓ Imagen recortada actualizada');
+                                }
+                            }
+                            if (data.processed_image) {
+                                localStorage.setItem('asl_processed_image', data.processed_image);
+                                console.log('✓ Imagen procesada guardada en localStorage');
+                                // Actualizar directamente la imagen si existe
+                                const procImg = document.getElementById('asl-processed-img');
+                                if (procImg) {
+                                    procImg.src = data.processed_image;
+                                    procImg.style.display = 'block';
+                                    const placeholder = document.getElementById('processed-img-placeholder');
+                                    if (placeholder) placeholder.style.display = 'none';
+                                    console.log('✓ Imagen procesada actualizada');
+                                }
+                            }
+                            
                             // Guardar en localStorage para Reflex
                             localStorage.setItem('asl_prediction', JSON.stringify({
                                 letter: data.letter || '?',
@@ -182,6 +210,32 @@ def index() -> rx.Component:
                     }
                 }
             }, 50);
+            
+            // Actualizar imágenes procesadas desde localStorage
+            setInterval(function() {
+                const handCrop = localStorage.getItem('asl_hand_crop');
+                const processedImg = localStorage.getItem('asl_processed_image');
+                
+                if (handCrop) {
+                    const imgElement = document.getElementById('asl-hand-crop-img');
+                    const placeholder = document.getElementById('hand-crop-placeholder');
+                    if (imgElement) {
+                        imgElement.src = handCrop;
+                        imgElement.style.display = 'block';
+                        if (placeholder) placeholder.style.display = 'none';
+                    }
+                }
+                
+                if (processedImg) {
+                    const imgElement = document.getElementById('asl-processed-img');
+                    const placeholder = document.getElementById('processed-img-placeholder');
+                    if (imgElement) {
+                        imgElement.src = processedImg;
+                        imgElement.style.display = 'block';
+                        if (placeholder) placeholder.style.display = 'none';
+                    }
+                }
+            }, 100);
             """
         ),
         
@@ -350,6 +404,45 @@ def index() -> rx.Component:
                             </div>
                         </div>
                         """),
+                        
+                        # Imágenes procesadas
+                        rx.vstack(
+                            rx.heading("Procesamiento", size="5", font_weight="600", color="#48bb78"),
+                            rx.hstack(
+                                rx.vstack(
+                                    rx.text("Mano Recortada", font_size="sm", font_weight="600", color="#3182ce"),
+                                    rx.html("""
+                                    <div id="hand-crop-container" style="position: relative; width: 100%; aspect-ratio: 1;">
+                                        <img id="asl-hand-crop-img" src="" style="width: 100%; height: 100%; border: 2px solid #3182ce; border-radius: 6px; object-fit: contain; display: none;" />
+                                        <div id="hand-crop-placeholder" style="width: 100%; height: 100%; background: #1a1a1a; border: 2px dashed #3182ce; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
+                                            Esperando...
+                                        </div>
+                                    </div>
+                                    """),
+                                    flex="1"
+                                ),
+                                rx.vstack(
+                                    rx.text("Imagen CNN (28x28)", font_size="sm", font_weight="600", color="#9f7aea"),
+                                    rx.html("""
+                                    <div id="processed-img-container" style="position: relative; width: 100%; aspect-ratio: 1;">
+                                        <img id="asl-processed-img" src="" style="width: 100%; height: 100%; border: 2px solid #9f7aea; border-radius: 6px; object-fit: contain; image-rendering: pixelated; display: none;" />
+                                        <div id="processed-img-placeholder" style="width: 100%; height: 100%; background: #1a1a1a; border: 2px dashed #9f7aea; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #666; font-size: 11px;">
+                                            Entrada...
+                                        </div>
+                                    </div>
+                                    """),
+                                    flex="1"
+                                ),
+                                width="100%",
+                                spacing="2"
+                            ),
+                            width="100%",
+                            spacing="2",
+                            border="1px solid #e2e8f0",
+                            padding="1em",
+                            border_radius="8px",
+                            background=rx.color_mode_cond("#fafafa", "#111111")
+                        ),
                         
                         # Estado de grabación
                         rx.cond(

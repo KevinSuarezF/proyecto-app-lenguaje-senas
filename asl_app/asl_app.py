@@ -219,6 +219,20 @@ def process_frame_data(frame_data: str):
             normalized = resized.astype('float32') / 255.0
             input_data = normalized.reshape(1, 28, 28, 1)
 
+            # Codificar imágenes para envío (para visualización)
+            # Imagen recortada original
+            hand_crop_bgr = cv2.cvtColor(hand_crop, cv2.COLOR_RGB2BGR)
+            _, hand_crop_encoded = cv2.imencode('.jpg', hand_crop_bgr)
+            hand_crop_b64 = base64.b64encode(hand_crop_encoded).decode()
+            
+            # Imagen procesada (28x28 en escala de grises, expandida para visualización)
+            # Ampliar 10x para que se vea mejor (280x280)
+            resized_upscaled = cv2.resize(resized, (280, 280), interpolation=cv2.INTER_NEAREST)
+            resized_upscaled_uint8 = (resized_upscaled * 255).astype('uint8')
+            resized_bgr = cv2.cvtColor(resized_upscaled_uint8, cv2.COLOR_GRAY2BGR)
+            _, resized_encoded = cv2.imencode('.jpg', resized_bgr)
+            resized_b64 = base64.b64encode(resized_encoded).decode()
+
             # 5. PREDICCIÓN (Aquí ya existe 'model' porque lo cargamos arriba)
             predictions = model.predict(input_data, verbose=0)
             predicted_class = int(np.argmax(predictions[0]))
@@ -230,7 +244,9 @@ def process_frame_data(frame_data: str):
             return {
                 "success": True,
                 "letter": label_to_letter.get(predicted_class, "?"),
-                "confidence": f"{confidence*100:.1f}%"
+                "confidence": f"{confidence*100:.1f}%",
+                "hand_crop": f"data:image/jpeg;base64,{hand_crop_b64}",
+                "processed_image": f"data:image/jpeg;base64,{resized_b64}"
             }
         
         return {"success": False, "error": "No hand detected"}
