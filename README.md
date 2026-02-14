@@ -29,8 +29,7 @@ proyecto-app-lenguaje-senas/
 │   ├── 01_descarga_datos.ipynb    # Descarga del dataset
 │   ├── 02_EDA.ipynb               # Analisis exploratorio
 │   ├── 03_preprocesamiento.ipynb  # Procesamiento de datos
-│   ├── 04_entrenamiento_modelos.ipynb
-│   └── 05_fine_tuning.ipynb
+│   └── 04_entrenamiento_modelos.ipynb  # Entrenamiento y comparación de modelos
 │
 ├── data/                           # Datasets
 │   ├── raw/                        # Datos crudos
@@ -178,10 +177,11 @@ Modelo CNN personalizado (DeepCNN) con:
 
 Para mas detalles sobre cada componente:
 
-- **[Analisis EDA](notebooks/02_EDA.ipynb)** - Exploracion del dataset
-- **[Preprocesamiento](notebooks/03_preprocesamiento.ipynb)** - Transformaciones de datos  
-- **[Entrenamiento](notebooks/04_entrenamiento_modelos.ipynb)** - Comparacion de modelos
-- **[Codigo fuente - asl_app](asl_app/)** - Implementacion de la aplicacion
+- **[Descarga de Datos](notebooks/01_descarga_datos.ipynb)** - Obtención del dataset
+- **[Análisis EDA](notebooks/02_EDA.ipynb)** - Exploración y visualización del dataset
+- **[Preprocesamiento](notebooks/03_preprocesamiento.ipynb)** - Transformaciones y data augmentation
+- **[Entrenamiento](notebooks/04_entrenamiento_modelos.ipynb)** - Entrenamiento y comparación de modelos
+- **[Código fuente - asl_app](asl_app/)** - Implementación de la aplicación web
 
 ## Autores
 
