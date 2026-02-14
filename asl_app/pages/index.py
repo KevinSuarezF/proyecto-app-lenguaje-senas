@@ -9,6 +9,14 @@ def index() -> rx.Component:
         # Script global para captura de cámara - Definen funciones en window
         rx.script(
             """
+            // Limpiar localStorage al iniciar la app
+            localStorage.removeItem('current_frame');
+            localStorage.removeItem('asl_hand_crop');
+            localStorage.removeItem('asl_processed_image');
+            localStorage.removeItem('asl_original_frame');
+            localStorage.removeItem('asl_error');
+            localStorage.removeItem('asl_prediction');
+            
             window.streaming = false;
             window.current_frame = null;
             
